@@ -1,0 +1,266 @@
+<h2 style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);">In-chat 3D editor of the live Unity scene: orbit, select and transform objects with a gizmo or numeric fields, inspect markers, and apply changes back to Unity.</h2>
+<style>
+#sbx *{box-sizing:border-box}
+#sbx{--pan:var(--surface-1);--ln:var(--border);--acc:var(--text-accent);--accbg:var(--bg-accent);--tx:var(--text-primary);--tx2:var(--text-secondary);--tx3:var(--text-muted);--ok:var(--text-success);--warn:var(--text-warning);
+--ax-x:#e5484d;--ax-y:#46a758;--ax-z:#0091ff;}
+#sbx .bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+#sbx button{height:28px;font-size:12.5px;padding:0 10px;border:0.5px solid var(--ln);background:transparent;color:var(--tx2);border-radius:7px;cursor:pointer;transition:all .14s;display:inline-flex;align-items:center;justify-content:center;line-height:1}
+#sbx button:hover{border-color:var(--acc);color:var(--tx)}
+#sbx .seg{display:inline-flex;border:0.5px solid var(--ln);border-radius:7px;overflow:hidden}
+#sbx .seg button{border:none;border-radius:0;height:26px}
+#sbx .seg button+button{border-left:0.5px solid var(--ln)}
+#sbx .on{background:var(--accbg)!important;color:var(--acc)!important;border-color:var(--acc)!important}
+#sbx .chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border:0.5px solid var(--ln);border-radius:999px;font-size:11.5px;color:var(--tx2)}
+#sbx .card{background:var(--pan);border:0.5px solid var(--ln);border-radius:9px}
+#sbx input[type=number]{height:28px;font-size:12.5px;width:100%;min-width:0;background:transparent;border:0.5px solid var(--ln);color:var(--tx);border-radius:6px;padding:0 6px;font-family:var(--font-mono),ui-monospace,monospace}
+#sbx .frow{display:grid;grid-template-columns:34px 1fr 1fr 1fr;gap:4px 5px;align-items:center}
+#sbx .fcell{display:flex;align-items:center;gap:3px}
+#sbx .axl{display:inline-flex;align-items:center;justify-content:center;width:18px;height:28px;font-size:11px;font-weight:600;border-radius:4px;cursor:ew-resize;user-select:none}
+#sbx .pin{position:absolute;pointer-events:auto;transform:translate(-50%,-100%);cursor:pointer}
+#sbx .pinb{display:flex;align-items:center;justify-content:center;min-width:17px;height:17px;padding:0 3px;border-radius:50% 50% 50% 2px;color:#fff;font-size:9.5px;font-weight:600;border:1.5px solid rgba(255,255,255,.85);box-shadow:0 1px 4px rgba(0,0,0,.35)}
+#sbx .pincard{position:absolute;bottom:21px;left:50%;transform:translateX(-50%);white-space:nowrap;background:var(--pan);border:0.5px solid var(--ln);border-radius:7px;padding:5px 9px;font-size:11px;color:var(--tx);display:none;box-shadow:0 3px 10px rgba(0,0,0,.22)}
+#sbx .pin:hover .pincard{display:block}
+#sbx .toast{background:var(--pan);border:0.5px solid var(--ln);border-radius:8px;padding:6px 12px;font-size:12.5px;color:var(--tx);box-shadow:0 2px 8px rgba(0,0,0,.18);opacity:0;transform:translateY(6px);transition:all .18s}
+#sbx .toast.show{opacity:1;transform:none}
+#sbx #ovl .spin{animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){#sbx *{animation:none!important;transition:none!important}}
+</style>
+<div id="sbx" style="padding:2px 0">
+ <div class="bar" style="margin-bottom:7px">
+   <span class="seg" id="mode"><button data-g="translate" class="on">Move</button><button data-g="rotate">Rotate</button><button data-g="scale">Scale</button></span>
+   <span class="seg"><button id="sp-world" class="on">World</button><button id="sp-local">Local</button></span>
+   <button id="home">Frame</button>
+   <span style="flex:1"></span>
+   <span class="chip" id="scenechip">scene</span>
+   <span class="chip" id="sync"><span id="syncdot" style="width:7px;height:7px;border-radius:50%;background:var(--ok)"></span><span id="synctx">in sync</span></span>
+ </div>
+ <div id="stage" style="position:relative;width:100%;height:440px;border:0.5px solid var(--ln);border-radius:12px;overflow:hidden;background:#c3ccd6">
+   <div id="mount" style="position:absolute;inset:0;touch-action:none"></div>
+   <div id="vig" style="position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 62%,rgba(20,28,40,.16) 100%)"></div>
+   <div id="pins" style="position:absolute;inset:0;pointer-events:none;overflow:hidden"></div>
+   <div id="nametag" style="position:absolute;display:none;pointer-events:none;background:rgba(22,26,32,.82);color:#eef2f7;font-size:11px;padding:2px 8px;border-radius:5px;z-index:30"></div>
+   <div id="hud" class="card" style="position:absolute;top:8px;left:8px;padding:7px 10px;display:none;min-width:150px;z-index:20">
+     <div id="hud-name" style="font-size:12.5px;font-weight:500;color:var(--tx)"></div>
+     <div id="hud-dims" style="font-size:11px;color:var(--tx2);font-family:var(--font-mono),monospace;margin-top:3px"></div>
+   </div>
+   <button id="triad-home" class="card" style="position:absolute;top:8px;right:8px;height:26px;z-index:20;background:var(--pan)">reset view</button>
+   <div id="gesture" style="position:absolute;bottom:10px;left:50%;transform:translateX(-50%);display:flex;gap:12px;background:rgba(22,26,32,.78);color:#dfe6ee;font-size:11px;padding:5px 14px;border-radius:999px;z-index:25;transition:opacity .5s;pointer-events:none">
+     <span>drag orbit</span><span>wheel zoom</span><span>right-drag pan</span><span>dbl-click frame</span></div>
+   <div id="toasts" style="position:absolute;bottom:34px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;align-items:center;z-index:35;pointer-events:none"></div>
+   <div id="ovl" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:8px;color:#334;background:#c3ccd6;font-size:13.5px;z-index:50">
+     <div class="spin" style="width:20px;height:20px;border:2px solid #99a;border-top-color:#37a;border-radius:50%"></div><span id="ovltx">Building the scene...</span></div>
+ </div>
+ <div id="dbg" style="display:none;color:var(--text-danger);font-size:12px;margin-top:6px;font-family:var(--font-mono),monospace"></div>
+ <div id="ctx" style="margin-top:8px">
+   <div id="ctx-empty" class="card" style="padding:9px 12px;font-size:12.5px;color:var(--tx2)">Click an object to select it, then drag the gizmo or type values. Pins are markers. <b>Apply ></b> sends the change to Unity through Claude.</div>
+   <div id="ctx-sel" class="card" style="display:none;padding:10px 12px">
+     <div class="frow" style="margin-bottom:4px"><span style="font-size:11px;color:var(--tx3)">Pos</span>
+       <span class="fcell"><span class="axl" data-s="fx" style="color:var(--ax-x);background:color-mix(in srgb,var(--ax-x) 12%,transparent)">X</span><input id="fx" type="number" step="0.1"></span>
+       <span class="fcell"><span class="axl" data-s="fy" style="color:var(--ax-y);background:color-mix(in srgb,var(--ax-y) 12%,transparent)">Y</span><input id="fy" type="number" step="0.1"></span>
+       <span class="fcell"><span class="axl" data-s="fz" style="color:var(--ax-z);background:color-mix(in srgb,var(--ax-z) 12%,transparent)">Z</span><input id="fz" type="number" step="0.1"></span></div>
+     <div class="frow" style="margin-bottom:4px"><span style="font-size:11px;color:var(--tx3)">Rot</span>
+       <span class="fcell"><span class="axl" data-s="rx" style="color:var(--ax-x);background:color-mix(in srgb,var(--ax-x) 12%,transparent)">X</span><input id="rx" type="number" step="1"></span>
+       <span class="fcell"><span class="axl" data-s="ry" style="color:var(--ax-y);background:color-mix(in srgb,var(--ax-y) 12%,transparent)">Y</span><input id="ry" type="number" step="1"></span>
+       <span class="fcell"><span class="axl" data-s="rz" style="color:var(--ax-z);background:color-mix(in srgb,var(--ax-z) 12%,transparent)">Z</span><input id="rz" type="number" step="1"></span></div>
+     <div class="frow"><span style="font-size:11px;color:var(--tx3)">Scale</span>
+       <span class="fcell"><span class="axl" data-s="sx" style="color:var(--ax-x);background:color-mix(in srgb,var(--ax-x) 12%,transparent)">X</span><input id="sx" type="number" step="0.1"></span>
+       <span class="fcell"><span class="axl" data-s="sy" style="color:var(--ax-y);background:color-mix(in srgb,var(--ax-y) 12%,transparent)">Y</span><input id="sy" type="number" step="0.1"></span>
+       <span class="fcell"><span class="axl" data-s="sz" style="color:var(--ax-z);background:color-mix(in srgb,var(--ax-z) 12%,transparent)">Z</span><input id="sz" type="number" step="0.1"></span></div>
+     <div style="display:flex;align-items:center;gap:8px;margin-top:9px"><span id="selname" style="font-size:12px;color:var(--tx2)"></span><span style="flex:1"></span>
+       <button id="revert">Revert last</button><button id="apply" style="border-color:var(--acc);color:var(--acc)">Apply to Unity ></button></div>
+   </div>
+ </div>
+</div>
+<script type="importmap">
+{ "imports": { "three": "https://esm.sh/three@0.160.0", "three/addons/": "https://esm.sh/three@0.160.0/examples/jsm/" } }
+</script>
+<script type="module">
+const $=id=>document.getElementById(id);
+function showErr(m){const d=$('dbg');if(d){d.style.display='block';d.textContent=' '+m}const o=$('ovltx');if(o)o.textContent='Error: '+m}
+window.addEventListener('error',e=>showErr(e.message||'script error'));
+window.addEventListener('unhandledrejection',e=>showErr((e.reason&&e.reason.message)||'load failed'));
+
+/* ===== baked data (injected by tools/bake-inline-editor.ps1). Convention: Unity coords,
+   Z-MIRRORED for a matching view; positions [x,y,z], rot euler YXZ degrees, geometry v/i real. ===== */
+const NODES = /*__NODES__*/ [];
+const MARKERS = /*__MARKERS__*/ [];
+const SCENE = /*__SCENE__*/ "scene";
+
+const TYPEC={Point:'#ff6b35',Axis:'#4da3ff',Plane:'#3fbf7f',Volume:'#b07cff',Path:'#2ac1c9'};
+try{
+const THREE=await import('three');
+const {TransformControls}=await import('three/addons/controls/TransformControls.js');
+const {RoomEnvironment}=await import('three/addons/environments/RoomEnvironment.js');
+const D2R=THREE.MathUtils.degToRad,R2D=THREE.MathUtils.radToDeg,UP=new THREE.Vector3(0,1,0);
+// Unity Quaternion.Euler == three euler order 'YXZ'. The view is Z-mirrored to match Unity,
+// so rotations are conjugated by the mirror (negate qx,qy). Same math Studio uses.
+const eulToQ=r=>{const q=new THREE.Quaternion().setFromEuler(new THREE.Euler(D2R(r[0]),D2R(r[1]),D2R(r[2]),'YXZ'));return new THREE.Quaternion(-q.x,-q.y,q.z,q.w)};
+const qToEul=q=>{const qu=new THREE.Quaternion(-q.x,-q.y,q.z,q.w);const e=new THREE.Euler().setFromQuaternion(qu,'YXZ');return[R2D(e.x),R2D(e.y),R2D(e.z)]};
+
+const mount=$('mount'),stage=$('stage');
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(2,devicePixelRatio));
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.02;
+let W=mount.clientWidth,H=mount.clientHeight;renderer.setSize(W,H);renderer.autoClear=false;
+mount.appendChild(renderer.domElement);renderer.domElement.style.display='block';
+const scene=new THREE.Scene();scene.fog=new THREE.Fog(0xc3ccd6,40,140);
+const pmrem=new THREE.PMREMGenerator(renderer);scene.environment=pmrem.fromScene(new RoomEnvironment(),0.04).texture;
+const sky=new THREE.Mesh(new THREE.SphereGeometry(300,32,16),new THREE.ShaderMaterial({side:THREE.BackSide,fog:false,
+ uniforms:{top:{value:new THREE.Color(0x8ea6c2)},hor:{value:new THREE.Color(0xd7dfe8)},bot:{value:new THREE.Color(0x76818f)}},
+ vertexShader:'varying vec3 vp;void main(){vp=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+ fragmentShader:'varying vec3 vp;uniform vec3 top;uniform vec3 hor;uniform vec3 bot;void main(){float h=normalize(vp).y;vec3 c=h>0.?mix(hor,top,pow(clamp(h,0.,1.),.5)):mix(hor,bot,pow(clamp(-h,0.,1.),.5));gl_FragColor=vec4(c,1.);}'}));
+scene.add(sky);
+scene.add(new THREE.HemisphereLight(0xdfe8f2,0x5a5f66,0.9));
+const sun=new THREE.DirectionalLight(0xfff4e2,1.85);sun.position.set(12,18,9);sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048);sun.shadow.camera.near=1;sun.shadow.camera.far=120;
+sun.shadow.camera.left=-40;sun.shadow.camera.right=40;sun.shadow.camera.top=40;sun.shadow.camera.bottom=-40;sun.shadow.bias=-0.0004;scene.add(sun);
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(1000,1000),new THREE.ShadowMaterial({opacity:0.26}));
+ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
+let grid=new THREE.GridHelper(80,80,0x8a94a0,0xa9b2bd);grid.material.transparent=true;grid.material.opacity=0.7;scene.add(grid);
+const cam=new THREE.PerspectiveCamera(45,W/H,0.05,2000);
+const HOME={p:new THREE.Vector3(8,6,11),t:new THREE.Vector3(0,1,0)};
+let targetV=HOME.t.clone(),goalPos=HOME.p.clone(),goalTarget=HOME.t.clone();cam.position.copy(goalPos);
+
+const COLORS=[0x6a6a66,0x3f7fd4,0x9098a0,0x4f8f6c,0x9c6f4a,0xb07cff];
+// Unity primitives share one mesh each, so the bake references these instead of shipping geometry.
+const CUBEV=[0.5,-0.5,0.5,-0.5,-0.5,0.5,0.5,0.5,0.5,-0.5,0.5,0.5,0.5,0.5,-0.5,-0.5,0.5,-0.5,0.5,-0.5,-0.5,-0.5,-0.5,-0.5,0.5,0.5,0.5,-0.5,0.5,0.5,0.5,0.5,-0.5,-0.5,0.5,-0.5,0.5,-0.5,-0.5,0.5,-0.5,0.5,-0.5,-0.5,0.5,-0.5,-0.5,-0.5,-0.5,-0.5,0.5,-0.5,0.5,0.5,-0.5,0.5,-0.5,-0.5,-0.5,-0.5,0.5,-0.5,-0.5,0.5,0.5,-0.5,0.5,0.5,0.5,0.5,-0.5,0.5];
+const CUBEI=[0,2,3,0,3,1,8,4,5,8,5,9,10,6,7,10,7,11,12,13,14,12,14,15,16,17,18,16,18,19,20,21,22,20,22,23];
+const CYLV=[-0.475529,-1,-0.154509,-0.404509,-1,-0.293893,-0.293893,-1,-0.404509,-0.154509,-1,-0.475529,0,-1,-0.5,0.154509,-1,-0.475529,0.293893,-1,-0.404509,0.404509,-1,-0.293893,0.475528,-1,-0.154509,0.5,-1,0,0.475528,-1,0.154509,0.404509,-1,0.293893,0.293893,-1,0.404509,0.154509,-1,0.475528,0,-1,0.5,-0.154509,-1,0.475528,-0.293893,-1,0.404509,-0.404509,-1,0.293893,-0.475528,-1,0.154509,-0.5,-1,0,-0.475529,1,-0.154509,-0.404509,1,-0.293893,-0.293893,1,-0.404509,-0.154509,1,-0.475529,0,1,-0.5,0.154509,1,-0.475529,0.293893,1,-0.404509,0.404509,1,-0.293893,0.475528,1,-0.154509,0.5,1,0,0.475528,1,0.154509,0.404509,1,0.293893,0.293893,1,0.404509,0.154509,1,0.475528,0,1,0.5,-0.154509,1,0.475528,-0.293893,1,0.404509,-0.404509,1,0.293893,-0.475528,1,0.154509,-0.5,1,0,0,-1,0,0,1,0,0.5,-1,0,0.5,1,0,-0.5,-1,0,-0.5,1,0,-0.475529,1,-0.154509,-0.475529,-1,-0.154509,-0.404509,-1,-0.293893,-0.475529,-1,-0.154509,-0.293893,-1,-0.404509,-0.154509,-1,-0.475529,0,-1,-0.5,0.154509,-1,-0.475529,0.293893,-1,-0.404509,0.404509,-1,-0.293893,0.475528,-1,-0.154509,0.5,-1,0,0.475528,-1,0.154509,0.404509,-1,0.293893,0.293893,-1,0.404509,0.154509,-1,0.475528,0,-1,0.5,-0.154509,-1,0.475528,-0.293893,-1,0.404509,-0.404509,-1,0.293893,-0.475528,-1,0.154509,-0.5,-1,0,-0.475529,1,-0.154509,-0.404509,1,-0.293893,-0.293893,1,-0.404509,-0.154509,1,-0.475529,0,1,-0.5,0.154509,1,-0.475529,0.293893,1,-0.404509,0.404509,1,-0.293893,0.475528,1,-0.154509,0.5,1,0,0.475528,1,0.154509,0.404509,1,0.293893,0.293893,1,0.404509,0.154509,1,0.475528,0,1,0.5,-0.154509,1,0.475528,-0.293893,1,0.404509,-0.404509,1,0.293893,-0.475528,1,0.154509,-0.5,1,0];
+const CYLI=[0,20,21,0,21,1,1,21,22,1,22,2,2,22,23,2,23,3,3,23,24,3,24,4,4,24,25,4,25,5,5,25,26,5,26,6,6,26,27,6,27,7,7,27,28,7,28,8,8,28,29,8,29,9,42,43,30,42,30,10,10,30,31,10,31,11,11,31,32,11,32,12,12,32,33,12,33,13,13,33,34,13,34,14,14,34,35,14,35,15,15,35,36,15,36,16,16,36,37,16,37,17,17,37,38,17,38,18,18,38,39,18,39,19,44,45,46,44,46,47,86,41,87,85,41,86,87,41,68,84,41,85,68,41,69,83,41,84,69,41,70,82,41,83,70,41,71,81,41,82,71,41,72,80,41,81,72,41,73,79,41,80,73,41,74,78,41,79,74,41,75,77,41,78,75,41,76,76,41,77,67,40,66,49,40,67,66,40,65,48,40,49,65,40,64,50,40,48,64,40,63,51,40,50,63,40,62,52,40,51,62,40,61,53,40,52,61,40,60,54,40,53,60,40,59,55,40,54,59,40,58,56,40,55,58,40,57,57,40,56];
+const SHARED={cube:[CUBEV,CUBEI],cyl:[CYLV,CYLI]};
+function b64bytes(s){const bin=atob(s);const a=new Uint8Array(bin.length);for(let k=0;k<bin.length;k++)a[k]=bin.charCodeAt(k);return a}
+function buildGeo(n){
+ let vArr,iArr;
+ if(n.geo&&SHARED[n.geo]){vArr=SHARED[n.geo][0];iArr=SHARED[n.geo][1];}
+ else if(n.pv&&n.ix){ // custom mesh: base64 uint16, dequantize
+  const pb=b64bytes(n.pv),nv=pb.length/6;vArr=new Float32Array(nv*3);
+  for(let k=0;k<nv;k++)for(let ax=0;ax<3;ax++){const j=(k*3+ax)*2;const q=pb[j]|(pb[j+1]<<8);vArr[k*3+ax]=n.gmin[ax]+(q/65535)*n.gsize[ax];}
+  const ib=b64bytes(n.ix),ni=ib.length/2;iArr=new Array(ni);for(let k=0;k<ni;k++)iArr[k]=ib[k*2]|(ib[k*2+1]<<8);
+ } else return null;
+ // Z-mirror: negate vert z + flip winding, so the view matches Unity
+ const pos=new Float32Array(vArr.length);for(let k=0;k<vArr.length;k++)pos[k]=(k%3===2)?-vArr[k]:vArr[k];
+ const idx=Array.from(iArr);for(let k=0;k<idx.length;k+=3){const t=idx[k+1];idx[k+1]=idx[k+2];idx[k+2]=t}
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setIndex(idx);g.computeVertexNormals();return g;
+}
+const meshObjs=[];let ci=0;
+NODES.forEach(n=>{
+ const g=buildGeo(n);if(!g)return;
+ const col=n.tint?new THREE.Color(n.tint[0],n.tint[1],n.tint[2]):new THREE.Color(COLORS[ci++%COLORS.length]);
+ const o=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:col,roughness:.62,metalness:.12,envMapIntensity:.5}));
+ o.castShadow=true;o.receiveShadow=true;
+ o.position.set(n.p[0],n.p[1],-n.p[2]);o.rotation.order='YXZ';
+ o.quaternion.copy(eulToQ(n.r||[0,0,0]));o.scale.set(...(n.s||[1,1,1]));
+ o.name=n.name;o.userData.id=n.id;o.userData.base=col.clone();
+ scene.add(o);meshObjs.push(o);
+});
+
+/* markers */
+const pinsEl=$('pins');const markerRoot=new THREE.Group();scene.add(markerRoot);
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+MARKERS.forEach((m,i)=>{
+ if(!m.w)return;const c=new THREE.Color(TYPEC[m.type]||'#ff6b35');const w=[m.w[0],m.w[1],-m.w[2]];
+ const grp=new THREE.Group();grp.position.set(...w);
+ if(m.type==='Path'&&m.knots){const pts=[];for(let k=0;k<m.knots.length;k+=3)pts.push(new THREE.Vector3(m.knots[k]-m.w[0],m.knots[k+1]-m.w[1],-(m.knots[k+2])-w[2]));
+  grp.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),new THREE.LineBasicMaterial({color:c})));}
+ else grp.add(new THREE.Mesh(new THREE.SphereGeometry(0.08,14,10),new THREE.MeshBasicMaterial({color:c})));
+ markerRoot.add(grp);
+ const pin=document.createElement('div');pin.className='pin';
+ pin.innerHTML='<div class="pinb" style="background:'+c.getStyle()+'">'+(i+1)+'</div><div class="pincard"><b>'+esc(m.name)+'</b>  '+esc(m.type)+'<br><span style="color:var(--tx3)">on '+esc(m.host||'?')+'</span></div>';
+ pin.addEventListener('click',()=>frameOn(new THREE.Vector3(...w),1.4));
+ pinsEl.appendChild(pin);m.pin=pin;m._w=w;
+});
+
+/* selection + gizmo */
+let sel=null,dirty=false,fieldEditing=false;
+const tc=new TransformControls(cam,renderer.domElement);tc.setSize(0.85);scene.add(tc);
+tc.addEventListener('objectChange',()=>{if(sel){dirty=true;if(!fieldEditing)syncFields();updateHUD();markAhead()}});
+let dragging=false;tc.addEventListener('dragging-changed',e=>{dragging=e.value});
+let outline=null;
+function select(o){
+ if(outline){outline.parent&&outline.parent.remove(outline);outline=null}
+ sel=o;
+ if(o){outline=new THREE.Mesh(o.geometry,new THREE.MeshBasicMaterial({color:0x4da3ff,side:THREE.BackSide,transparent:true,opacity:.9}));
+  outline.scale.set(1.04,1.04,1.04);o.add(outline);tc.attach(o);tc.visible=true;
+  $('ctx-empty').style.display='none';$('ctx-sel').style.display='block';$('selname').textContent=o.name;
+  $('hud').style.display='block';updateHUD();syncFields();}
+ else{tc.detach();tc.visible=false;$('ctx-empty').style.display='block';$('ctx-sel').style.display='none';$('hud').style.display='none'}
+}
+function updateHUD(){if(!sel)return;$('hud-name').textContent=sel.name;
+ if(!sel.geometry.boundingBox)sel.geometry.computeBoundingBox();
+ const b=sel.geometry.boundingBox.getSize(new THREE.Vector3());
+ $('hud-dims').textContent=(b.x*Math.abs(sel.scale.x)).toFixed(2)+'  '+(b.y*Math.abs(sel.scale.y)).toFixed(2)+'  '+(b.z*Math.abs(sel.scale.z)).toFixed(2)+' m'}
+const F={fx:$('fx'),fy:$('fy'),fz:$('fz'),rx:$('rx'),ry:$('ry'),rz:$('rz'),sx:$('sx'),sy:$('sy'),sz:$('sz')};
+function syncFields(){if(!sel)return;const p=sel.position,s=sel.scale,r=qToEul(sel.quaternion);
+ F.fx.value=+p.x.toFixed(3);F.fy.value=+p.y.toFixed(3);F.fz.value=+(-p.z).toFixed(3);
+ F.rx.value=+r[0].toFixed(1);F.ry.value=+r[1].toFixed(1);F.rz.value=+r[2].toFixed(1);
+ F.sx.value=+s.x.toFixed(3);F.sy.value=+s.y.toFixed(3);F.sz.value=+s.z.toFixed(3)}
+Object.values(F).forEach(f=>f.addEventListener('input',()=>{if(!sel)return;fieldEditing=true;
+ sel.position.set(+F.fx.value||0,+F.fy.value||0,-(+F.fz.value||0));
+ sel.quaternion.copy(eulToQ([+F.rx.value||0,+F.ry.value||0,+F.rz.value||0]));
+ sel.scale.set(+F.sx.value||0.0001,+F.sy.value||0.0001,+F.sz.value||0.0001);
+ dirty=true;updateHUD();markAhead();fieldEditing=false}));
+document.querySelectorAll('#ctx-sel .axl').forEach(lbl=>lbl.addEventListener('pointerdown',e=>{
+ const key=lbl.dataset.s,inp=F[key];if(!inp||!sel)return;try{lbl.setPointerCapture(e.pointerId)}catch(_){}
+ const sx=e.clientX,sv=+inp.value||0;let moved=0;const step=key[0]==='r'?0.5:(key[0]==='s'?0.01:0.02);
+ const mv=ev=>{const dx=ev.clientX-sx;moved=Math.max(moved,Math.abs(dx));inp.value=+(sv+dx*step).toFixed(3);inp.dispatchEvent(new Event('input'))};
+ const up=()=>{lbl.removeEventListener('pointermove',mv);lbl.removeEventListener('pointerup',up)};
+ lbl.addEventListener('pointermove',mv);lbl.addEventListener('pointerup',up);e.preventDefault()}));
+
+/* relay to Claude */
+function relay(t){try{if(typeof sendPrompt!=='undefined'&&sendPrompt){sendPrompt(t);return true}}catch(_){}
+ try{if(window.parent&&window.parent!==window&&window.parent.sendPrompt){window.parent.sendPrompt(t);return true}}catch(_){}return false}
+function markAhead(){$('syncdot').style.background='var(--warn)';$('synctx').textContent='ahead of Unity'}
+function toast(m){const t=document.createElement('div');t.className='toast';t.textContent=m;$('toasts').appendChild(t);
+ requestAnimationFrame(()=>t.classList.add('show'));setTimeout(()=>{t.classList.remove('show');setTimeout(()=>t.remove(),250)},2600)}
+$('apply').addEventListener('click',()=>{if(!sel){toast('Select something first');return}
+ const p=sel.position,s=sel.scale,r=qToEul(sel.quaternion);
+ const payload={mirroredZ:true,edits:[{id:sel.userData.id,name:sel.name,
+  position:[+p.x.toFixed(4),+p.y.toFixed(4),+(-p.z).toFixed(4)],
+  rotationEuler:[+r[0].toFixed(3),+r[1].toFixed(3),+r[2].toFixed(3)],
+  scale:[+s.x.toFixed(4),+s.y.toFixed(4),+s.z.toFixed(4)]}]};
+ if(relay('SPATIAL_APPLY '+JSON.stringify(payload))){toast('Pushed '+sel.name+' to Unity >');dirty=false}
+ else{toast(' open this inside the chat to apply');showErr('Copy to chat: SPATIAL_APPLY '+JSON.stringify(payload))}});
+$('revert').addEventListener('click',()=>{if(relay('SPATIAL_UNDO {}'))toast('Revert sent >')});
+
+/* nav */
+const ray=new THREE.Raycaster(),m2=new THREE.Vector2(),dom=renderer.domElement;
+let nav=null,lx=0,ly=0,moved=0,hoverEvt=null,lastHover=null;const nametag=$('nametag');
+function raycast(x,y){const r=dom.getBoundingClientRect();m2.x=((x-r.left)/r.width)*2-1;m2.y=-((y-r.top)/r.height)*2+1;ray.setFromCamera(m2,cam);return ray.intersectObjects(meshObjs,false)[0]||null}
+function orbit(dx,dy){const o=goalPos.clone().sub(goalTarget);const s=new THREE.Spherical().setFromVector3(o);s.theta-=dx*0.005;s.phi=Math.max(0.05,Math.min(Math.PI-0.05,s.phi-dy*0.005));o.setFromSpherical(s);goalPos.copy(goalTarget).add(o)}
+function pan(dx,dy){const d=goalPos.distanceTo(goalTarget);const f=goalTarget.clone().sub(goalPos).normalize();const rt=f.clone().cross(UP).normalize();const up=rt.clone().cross(f).normalize();const q=d*0.0016;const mv=rt.multiplyScalar(-dx*q).add(up.multiplyScalar(dy*q));goalPos.add(mv);goalTarget.add(mv)}
+function frameOn(c,rad){const f=goalPos.clone().sub(goalTarget).normalize();goalTarget.copy(c);goalPos.copy(c).addScaledVector(f,Math.max(1.2,rad*3.0))}
+function frameAll(){const b=new THREE.Box3();meshObjs.forEach(o=>b.expandByObject(o));if(b.isEmpty())return;const c=b.getCenter(new THREE.Vector3());const r=b.getBoundingSphere(new THREE.Sphere()).radius;HOME.t.copy(c);HOME.p.set(c.x+r*1.3,c.y+r*0.85,c.z+r*1.5);goalTarget.copy(c);goalPos.copy(HOME.p);
+ grid.geometry.dispose();if(grid.material)grid.material.dispose();scene.remove(grid);const gs=Math.max(20,Math.ceil(r*3/10)*10);grid=new THREE.GridHelper(gs,Math.min(120,gs),0x8a94a0,0xa9b2bd);grid.material.transparent=true;grid.material.opacity=0.6;grid.position.set(Math.round(c.x),0,Math.round(c.z));scene.add(grid);
+ scene.fog.near=r*2.5+8;scene.fog.far=r*6+40;sun.shadow.camera.left=-r*1.6;sun.shadow.camera.right=r*1.6;sun.shadow.camera.top=r*1.6;sun.shadow.camera.bottom=-r*1.6;sun.shadow.camera.updateProjectionMatrix()}
+dom.addEventListener('contextmenu',e=>e.preventDefault());
+dom.addEventListener('pointerdown',e=>{hide();if(e.button===0&&tc.axis)return;try{dom.setPointerCapture(e.pointerId)}catch(_){}lx=e.clientX;ly=e.clientY;moved=0;nav=e.button===0?'lmb':'pan';e.preventDefault()});
+dom.addEventListener('pointermove',e=>{hoverEvt=e;if(!nav||dragging)return;const dx=e.clientX-lx,dy=e.clientY-ly;lx=e.clientX;ly=e.clientY;moved+=Math.abs(dx)+Math.abs(dy);if(nav==='lmb'){if(moved>6)orbit(dx,dy)}else pan(dx,dy)});
+dom.addEventListener('pointerup',e=>{if(nav==='lmb'&&moved<10&&!dragging){const h=raycast(e.clientX,e.clientY);select(h?h.object:null)}nav=null});
+dom.addEventListener('dblclick',e=>{const h=raycast(e.clientX,e.clientY);if(h){const b=new THREE.Box3().setFromObject(h.object);frameOn(b.getCenter(new THREE.Vector3()),b.getBoundingSphere(new THREE.Sphere()).radius)}else frameAll()});
+dom.addEventListener('wheel',e=>{e.preventDefault();hide();const o=goalPos.clone().sub(goalTarget);const d=o.length();o.multiplyScalar(Math.max(0.5,Math.min(400,d*Math.exp(e.deltaY*0.0011)))/d);goalPos.copy(goalTarget).add(o)},{passive:false});
+function hoverStep(){if(!hoverEvt||dragging||nav){nametag.style.display='none';return}const h=raycast(hoverEvt.clientX,hoverEvt.clientY);const o=h?h.object:null;
+ if(lastHover&&lastHover!==sel&&lastHover!==o)lastHover.material.emissive.setHex(0);if(o&&o!==sel)o.material.emissive.copy(o.userData.base).multiplyScalar(0.22);lastHover=o;
+ const r=stage.getBoundingClientRect();if(o){nametag.textContent=o.name;nametag.style.display='block';nametag.style.left=(hoverEvt.clientX-r.left+13)+'px';nametag.style.top=(hoverEvt.clientY-r.top+14)+'px'}else nametag.style.display='none';mount.style.cursor=o?'pointer':'grab'}
+
+/* toolbar */
+$('mode').querySelectorAll('[data-g]').forEach(b=>b.addEventListener('click',()=>{tc.setMode(b.dataset.g);$('mode').querySelectorAll('[data-g]').forEach(x=>x.classList.toggle('on',x===b))}));
+$('sp-world').addEventListener('click',function(){tc.setSpace('world');this.classList.add('on');$('sp-local').classList.remove('on')});
+$('sp-local').addEventListener('click',function(){tc.setSpace('local');this.classList.add('on');$('sp-world').classList.remove('on')});
+$('home').addEventListener('click',frameAll);$('triad-home').addEventListener('click',()=>{goalPos.copy(HOME.p);goalTarget.copy(HOME.t)});
+function hide(){const g=$('gesture');if(g)g.style.opacity='0'}setTimeout(hide,6000);
+$('scenechip').textContent='scene: '+SCENE+'  '+meshObjs.length+' meshes';
+
+const v3=new THREE.Vector3();
+function placePin(el,w){v3.set(w[0],w[1],w[2]).project(cam);if(v3.z>1||Math.abs(v3.x)>1.05||Math.abs(v3.y)>1.05){el.style.display='none';return}el.style.display='';el.style.left=((v3.x*.5+.5)*W)+'px';el.style.top=((-v3.y*.5+.5)*H)+'px'}
+function fit(){W=mount.clientWidth;H=mount.clientHeight;if(W<2)return;renderer.setSize(W,H);cam.aspect=W/H;cam.updateProjectionMatrix()}
+new ResizeObserver(fit).observe(mount);
+frameAll();$('ovl').remove();
+(function loop(){requestAnimationFrame(loop);
+ if(mount.clientWidth>0&&(mount.clientWidth!==W||mount.clientHeight!==H))fit();if(W<2)return;
+ if(!dragging){cam.position.lerp(goalPos,0.18);targetV.lerp(goalTarget,0.18);cam.lookAt(targetV)}
+ hoverStep();MARKERS.forEach(m=>{if(m.pin)placePin(m.pin,m._w)});
+ renderer.setViewport(0,0,W,H);renderer.clear();renderer.render(scene,cam)})();
+}catch(err){showErr((err&&err.message)||String(err))}
+</script>

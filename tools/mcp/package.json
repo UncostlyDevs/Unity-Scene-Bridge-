@@ -1,0 +1,33 @@
+{
+  "name": "scenebridge-mcp",
+  "version": "0.9.5",
+  "description": "MCP server exposing a live Unity scene (via the SceneBridge editor bridge) as tools for an AI agent. Zero dependencies.",
+  "main": "scenebridge-mcp.js",
+  "type": "commonjs",
+  "bin": {
+    "scenebridge-mcp": "scenebridge-mcp.js"
+  },
+  "scripts": {
+    "start": "node scenebridge-mcp.js"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "files": [
+    "scenebridge-mcp.js",
+    "README.md"
+  ],
+  "keywords": [
+    "mcp",
+    "unity",
+    "claude",
+    "ai",
+    "scene",
+    "editor"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/UncostlyDevs/Unity-Scene-Bridge-.git"
+  }
+}

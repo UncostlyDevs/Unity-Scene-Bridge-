@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "scenebridge": {
+      "command": "node",
+      "args": ["tools/mcp/scenebridge-mcp.js"]
+    }
+  }
+}

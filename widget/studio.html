@@ -1,0 +1,587 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>SceneBridge Studio</title>
+<style>
+:root{--bg:#14171c;--pan:#1d2128;--ln:#2c323c;--tx:#e8edf4;--tx2:#9aa7b5;--tx3:#5f6b78;--acc:#4da3ff;--ok:#2bd576;--warn:#ffb224;--err:#ff5d5d;}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--tx);font:13px/1.5 system-ui,Segoe UI,sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--pan);border-bottom:1px solid var(--ln);flex:none}
+header b{font-size:13.5px;font-weight:600}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--tx2);border:1px solid var(--ln);border-radius:999px;padding:2px 10px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--err)}
+button{background:transparent;border:1px solid var(--ln);color:var(--tx2);border-radius:7px;height:26px;padding:0 10px;font-size:12px;cursor:pointer}
+button:hover{border-color:var(--acc);color:var(--tx)}
+button.on{background:rgba(77,163,255,.15);border-color:var(--acc);color:var(--acc)}
+#wrap{flex:1;display:flex;min-height:0}
+#tree{flex:none;width:216px;background:var(--pan);border-right:1px solid var(--ln);overflow-y:auto;padding:0 0 6px;display:flex;flex-direction:column;gap:1px}
+#tree.hidden{display:none}
+#treehdr{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--pan);border-bottom:1px solid var(--ln);font-size:10.5px;color:var(--tx3);letter-spacing:.04em;text-transform:uppercase}
+#treehdr button{height:22px;padding:0 7px;font-size:10.5px;border-radius:6px}
+#treewrap{padding:6px 4px 0;display:flex;flex-direction:column;gap:1px}
+#treegrip{flex:none;width:5px;cursor:ew-resize;background:transparent;transition:background .15s}
+#treegrip:hover,#treegrip.drag{background:rgba(77,163,255,.35)}
+.trow{display:flex;align-items:center;gap:5px;padding:2px 6px;border-radius:5px;cursor:pointer;font-size:11.5px;color:var(--tx2);white-space:nowrap;overflow:hidden;flex:none}
+.trow:hover{background:rgba(77,163,255,.10);color:var(--tx)}
+.trow.sel{background:rgba(77,163,255,.18);color:var(--acc)}
+.trow.hid{opacity:.4}
+.trow .tico{flex:none;font-size:10px;opacity:.7;width:12px;text-align:center}
+.trow .tname{overflow:hidden;text-overflow:ellipsis}
+.trow .teye{margin-left:auto;flex:none;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;opacity:.35;border-radius:4px;color:var(--tx2)}
+.trow .teye:hover{opacity:1;background:rgba(77,163,255,.15)}
+.trow.hid .teye{opacity:.85;color:var(--warn)}
+#stagewrap{flex:1;position:relative;min-height:0}
+#mount{position:absolute;inset:0}
+footer{flex:none;display:flex;align-items:center;gap:8px;padding:7px 14px;background:var(--pan);border-top:1px solid var(--ln)}
+footer input{width:86px;height:26px;background:var(--bg);border:1px solid var(--ln);color:var(--tx);border-radius:6px;padding:0 7px;font-size:12px;font-family:ui-monospace,monospace}
+footer .lbl{font-size:11px;color:var(--tx3);width:26px;text-align:right}
+#selname{font-weight:600;font-size:12.5px;min-width:90px}
+#log{position:absolute;left:10px;bottom:10px;font:11px ui-monospace,monospace;color:var(--tx2);background:rgba(20,23,28,.8);border:1px solid var(--ln);border-radius:8px;padding:6px 10px;max-width:46%;pointer-events:none}
+#live{position:absolute;top:10px;right:10px;display:flex;align-items:center;gap:7px;background:rgba(20,23,28,.85);border:1px solid var(--ln);border-radius:999px;padding:4px 12px;font-size:11.5px}
+#pulse{width:8px;height:8px;border-radius:50%;background:var(--ok);animation:pl 1.2s infinite}
+@keyframes pl{0%,100%{opacity:1}50%{opacity:.35}}
+</style>
+</head>
+<body>
+<header>
+  <b>SceneBridge Studio</b>
+  <span class="chip"><span class="dot" id="bdot"></span><span id="bstate">connecting...</span></span>
+  <span class="chip" id="scenechip">scene: -</span>
+  <span style="flex:1"></span>
+  <button id="treeb" class="on">Tree</button>
+  <button id="selmodeb" title="Root: clicking a part selects the whole prefab. Part: selects the exact mesh.">Sel: Root</button>
+  <button id="solob" title="Solo: move ONLY the selected object - its children hold their world position (great for fixing a body/pivot without disturbing wheels etc.)">Solo</button>
+  <button data-g="translate" class="on">Move</button>
+  <button data-g="rotate">Rotate</button>
+  <button data-g="scale">Scale</button>
+  <button id="snapb">Snap</button>
+  <button id="homeb">Home</button>
+</header>
+<div id="wrap">
+  <div id="tree"></div>
+  <div id="treegrip" title="Drag to resize the hierarchy panel"></div>
+  <div id="stagewrap">
+    <div id="mount"></div>
+    <div id="live"><span id="pulse"></span><span id="livetx">LIVE | two-way sync</span></div>
+    <div id="log">connecting to bridge...</div>
+  </div>
+</div>
+<footer>
+  <span id="selname" style="color:var(--tx2);">nothing selected</span>
+  <span class="lbl">pos</span><input id="fx" type="number" step="0.1"><input id="fy" type="number" step="0.1"><input id="fz" type="number" step="0.1">
+  <span class="lbl">rot</span><input id="rx" type="number" step="1"><input id="ry" type="number" step="1"><input id="rz" type="number" step="1">
+  <span class="lbl">scl</span><input id="sx" type="number" step="0.1"><input id="sy" type="number" step="0.1"><input id="sz" type="number" step="0.1">
+  <span style="flex:1"></span>
+  <span style="font-size:11px;color:var(--tx3);">changes stream to Unity as you drag | Unity edits stream back every second</span>
+</footer>
+<script type="importmap">
+{ "imports": { "three": "https://esm.sh/three@0.160.0", "three/addons/": "https://esm.sh/three@0.160.0/examples/jsm/" } }
+</script>
+<script type="module">
+let BRIDGE='http://localhost:8787';
+// Multiple Unity projects may each run a bridge on a different port (8787..8796). A browser
+// page can't read the port file, so scan the range and connect to the first that answers.
+async function discoverBridge(){
+ for(let port=8787;port<=8796;port++){
+  try{
+   const c=new AbortController();const t=setTimeout(()=>c.abort(),600);
+   const r=await fetch('http://localhost:'+port+'/ping',{signal:c.signal});clearTimeout(t);
+   if(r.ok){const j=await r.json();BRIDGE='http://localhost:'+port;return j;}
+  }catch(e){}
+ }
+ return null;
+}
+const $=id=>document.getElementById(id);
+const log=m=>{$('log').textContent=m;};
+import * as THREE from 'three';
+import {TransformControls} from 'three/addons/controls/TransformControls.js';
+const D2R=THREE.MathUtils.degToRad,R2D=THREE.MathUtils.radToDeg;
+const UP=new THREE.Vector3(0,1,0);
+
+const mount=$('mount');
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(2,devicePixelRatio));
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+let W=mount.clientWidth,H=mount.clientHeight;
+renderer.setSize(W,H);mount.appendChild(renderer.domElement);
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x1a2029);scene.fog=new THREE.Fog(0x1a2029,30,90);
+scene.add(new THREE.HemisphereLight(0xcfe0f2,0x3a3f46,0.9));
+const sun=new THREE.DirectionalLight(0xfff2dd,1.8);sun.position.set(9,14,6);sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048);sun.shadow.camera.near=1;sun.shadow.camera.far=60;
+sun.shadow.camera.left=-16;sun.shadow.camera.right=16;sun.shadow.camera.top=16;sun.shadow.camera.bottom=-16;sun.shadow.bias=-0.0004;
+scene.add(sun);
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(400,400),new THREE.ShadowMaterial({opacity:0.35}));
+ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
+let grid=new THREE.GridHelper(80,80,0x3a4552,0x262d36);scene.add(grid);
+
+const cam=new THREE.PerspectiveCamera(45,W/H,0.1,500);
+const HOME={p:new THREE.Vector3(8,5.5,10),t:new THREE.Vector3(0,1.4,0)};
+let targetV=HOME.t.clone(),goalPos=HOME.p.clone(),goalTarget=HOME.t.clone();
+cam.position.copy(goalPos);
+
+const COLORS=[0x3f7fd4,0x6a6a66,0x24242a,0x8a9099,0x4f8f6c,0x9c6f4a];
+const meshObjs=[];let nodeById={},rootHolder=new THREE.Group();scene.add(rootHolder);
+const markerRoot=new THREE.Group();scene.add(markerRoot);
+const TYPEC={Point:0xff6b35,Axis:0x4da3ff,Plane:0x3fbf7f,Volume:0xb07cff,Path:0x2ac1c9};
+
+// Unity sends WORLD transforms + hierarchy paths. We rebuild the real parent tree so
+// dragging a root moves its children instantly (no waiting on the 1s pull), matching
+// Unity semantics exactly.
+function setWorldTransform(o,p,r,s){
+ const q=unityEulerToQuat(r);
+ const parent=o.parent||rootHolder;
+ parent.updateWorldMatrix(true,false);
+ const pos=new THREE.Vector3(p[0],p[1],-p[2]);
+ o.position.copy(parent.worldToLocal(pos));
+ const pq=new THREE.Quaternion();parent.getWorldQuaternion(pq);
+ o.quaternion.copy(pq.invert().multiply(q));
+ const ps=new THREE.Vector3();parent.getWorldScale(ps);
+ o.scale.set(s[0]/(ps.x||1),s[1]/(ps.y||1),s[2]/(ps.z||1));
+}
+// PROVEN BY ALGEBRA (expand both quaternion formulas): Unity's Quaternion.Euler(x,y,z)
+// equals three.js Euler order 'YXZ' with the SAME positive angles - term-for-term
+// identical components. ('ZXY' differs in sign structure; negating angles gives the
+// conjugate = inverse rotation. Both wrong.) With 'YXZ' our matrices are numerically
+// Unity's, which skinning requires since bindposes are raw Unity numbers.
+// Plus the DISPLAY mirror: Unity is left-handed, three.js right-handed - raw coordinate
+// copying renders a mirror image. Convert at the boundary: negate Z on positions,
+// conjugate rotations by the Z-mirror (qx,qy negate), flip triangle winding on meshes.
+function unityEulerToQuat(r){
+ const q=new THREE.Quaternion().setFromEuler(new THREE.Euler(D2R(r[0]),D2R(r[1]),D2R(r[2]),'YXZ'));
+ return new THREE.Quaternion(-q.x,-q.y,q.z,q.w);
+}
+function quatToUnityEuler(q){
+ const qu=new THREE.Quaternion(-q.x,-q.y,q.z,q.w);
+ const e=new THREE.Euler().setFromQuaternion(qu,'YXZ');
+ return[R2D(e.x),R2D(e.y),R2D(e.z)];
+}
+// Exact local mirror - no reconstruction math, no drift.
+function setLocalTransform(o,l){
+ o.position.set(l.p[0],l.p[1],-l.p[2]);
+ o.quaternion.copy(unityEulerToQuat(l.r));
+ o.scale.set(l.s[0],l.s[1],l.s[2]);
+}
+let nodeCountSeen=0;
+function buildScene(data){
+ // Dispose the previous scene's GPU buffers first: three.js scene.remove only detaches the
+ // graph; geometry/material buffers linger until explicitly disposed, leaking across rebuilds.
+ meshObjs.forEach(o=>{
+  if(o.geometry)o.geometry.dispose();
+  const m=o.material; if(m){(Array.isArray(m)?m:[m]).forEach(x=>x&&x.dispose&&x.dispose());}
+ });
+ scene.remove(rootHolder);rootHolder=new THREE.Group();scene.add(rootHolder);
+ meshObjs.length=0;nodeById={};
+ const byPath={};let ci=0;
+ nodeCountSeen=data.nodes.length;
+ const pendingSkins=[];
+ data.nodes.forEach(n=>{
+  let obj;
+  if(n.kind==='mesh'&&n.mesh){
+   const g=new THREE.BufferGeometry();
+   // Z-mirror the geometry itself: negate vert z, flip winding so faces stay outward
+   const mv=n.mesh.v.slice();for(let k=2;k<mv.length;k+=3)mv[k]=-mv[k];
+   const mi=n.mesh.i.slice();for(let k=0;k<mi.length;k+=3){const tw=mi[k+1];mi[k+1]=mi[k+2];mi[k+2]=tw;}
+   g.setAttribute('position',new THREE.Float32BufferAttribute(mv,3));g.setIndex(mi);g.computeVertexNormals();
+   const mat=new THREE.MeshStandardMaterial({color:n.tint?new THREE.Color(n.tint[0],n.tint[1],n.tint[2]):COLORS[ci++%COLORS.length],roughness:.6,metalness:.15});
+   if(n.skinned&&n.bi&&n.bw&&n.bp&&n.bids){
+    // Client-side skinning, Unity-style: bones drive the skin ENTIRELY. Unity's bindposes
+    // already contain the bind-time mesh transform, so the SkinnedMesh itself must sit at
+    // IDENTITY (applying its node transform too would double-transform -> spaghetti).
+    // A proxy Group holds the node's place in the hierarchy for selection/tree/pushes.
+    g.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(n.bi,4));
+    g.setAttribute('skinWeight',new THREE.Float32BufferAttribute(n.bw,4));
+    const smesh=new THREE.SkinnedMesh(g,mat);
+    smesh.name=n.name;smesh.userData.path=n.path; // for the eye-toggle visibility check
+    smesh.frustumCulled=false;
+    smesh.matrixAutoUpdate=false;
+    smesh.castShadow=true;smesh.receiveShadow=true;
+    rootHolder.add(smesh);
+    meshObjs.push(smesh);
+    obj=new THREE.Group();
+    pendingSkins.push({mesh:smesh,bids:n.bids,bp:n.bp,proxy:obj});
+   }else{
+    obj=new THREE.Mesh(g,mat);
+    obj.castShadow=true;obj.receiveShadow=true;
+    meshObjs.push(obj);
+   }
+  }else{
+   obj=new THREE.Group();
+  }
+  obj.name=n.name;obj.userData.id=n.id;obj.userData.path=n.path;obj.userData.kind=n.kind;obj.userData.skinned=!!n.skinned;
+  obj.rotation.order='YXZ'; // Unity's euler convention - fields/gizmo/push must all agree
+  const cut=n.path.lastIndexOf('/');
+  const parent=(cut>0&&byPath[n.path.slice(0,cut)])||rootHolder;
+  parent.add(obj);
+  if(n.l)setLocalTransform(obj,n.l);else setWorldTransform(obj,n.t.p,n.t.r,n.t.s);
+  byPath[n.path]=obj;nodeById[n.id]=obj;
+ });
+ // bind skeletons after ALL nodes exist (bones may appear after their mesh in the dump)
+ pendingSkins.forEach(ps=>{
+  const bones=ps.bids.map(id=>nodeById[id]);
+  if(bones.some(b=>!b)){log('skin: missing bones for '+ps.mesh.name);return;}
+  const inv=[];
+  for(let k=0;k<ps.bp.length;k+=16){
+   const m=ps.bp.slice(k,k+16);
+   // conjugate by the Z-mirror (M|bp|M): negate every element with exactly one z index
+   m[2]=-m[2];m[6]=-m[6];m[14]=-m[14];m[8]=-m[8];m[9]=-m[9];m[11]=-m[11];
+   inv.push(new THREE.Matrix4().fromArray(m));
+  }
+  ps.mesh.bind(new THREE.Skeleton(bones,inv),new THREE.Matrix4()); // identity bind - bones do everything
+  ps.mesh.userData.proxyFor=ps.proxy; // clicks on the skin select the hierarchy node
+ });
+ buildTree(data);
+ fitWorld();
+}
+
+// Real scenes have real extents - size the grid, fog, shadows and Home framing to fit
+// whatever is actually in the scene instead of assuming everything sits near the origin.
+function fitWorld(){
+ const b=new THREE.Box3();
+ meshObjs.forEach(o=>{if(o.isSkinnedMesh)return;b.expandByObject(o);});
+ if(b.isEmpty())return;
+ const c=b.getCenter(new THREE.Vector3());
+ const r=Math.max(12,b.getBoundingSphere(new THREE.Sphere()).radius);
+ scene.remove(grid);
+ const gs=Math.ceil((r*3)/10)*10;
+ grid=new THREE.GridHelper(gs,Math.min(120,gs),0x3a4552,0x262d36);
+ grid.position.set(Math.round(c.x),0,Math.round(c.z));
+ scene.add(grid);
+ scene.fog.near=r*3.5+20;scene.fog.far=r*7+80;
+ sun.shadow.camera.left=-r*1.6;sun.shadow.camera.right=r*1.6;sun.shadow.camera.top=r*1.6;sun.shadow.camera.bottom=-r*1.6;
+ sun.shadow.camera.far=r*8+30;sun.shadow.camera.updateProjectionMatrix();
+ HOME.t.copy(c);
+ HOME.p.set(c.x+r*1.35,c.y+r*0.9,c.z+r*1.55);
+}
+
+/* ---- hierarchy panel + per-object visibility ---- */
+const treeEl=$('tree');
+const KICO={mesh:'▦',box:'▢',empty:'◇',camera:'⌖',light:'☀'};
+const EYE_ON='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="2.6"/></svg>';
+const EYE_OFF='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 5.5C2.9 7 2 9 2 12s3.6 7 10 7c2 0 3.7-.4 5.1-1M9 5.3A9 9 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-2.4 3.2"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><line x1="3" y1="3" x2="21" y2="21"/></svg>';
+// hide by PATH (survives domain-reload id churn); persisted so a decluttered view sticks
+const hiddenPaths=new Set(JSON.parse(localStorage.getItem('sb_hidden')||'[]'));
+function saveHidden(){localStorage.setItem('sb_hidden',JSON.stringify([...hiddenPaths]));}
+function isHidden(path){ if(hiddenPaths.has(path))return true; for(const hp of hiddenPaths){ if(path.startsWith(hp+'/'))return true; } return false; }
+function applyVisibility(){
+ // set .visible on real meshes (drives BOTH render and raycast) by effective hidden state
+ meshObjs.forEach(o=>{ o.visible=!isHidden(o.userData.path||''); });
+ treeEl.querySelectorAll('.trow').forEach(r=>{
+  const p=r.dataset.path||'';const hid=isHidden(p);
+  r.classList.toggle('hid',hid);
+  const eye=r.querySelector('.teye');
+  if(eye){eye.innerHTML=hiddenPaths.has(p)?EYE_OFF:EYE_ON;eye.title=(hiddenPaths.has(p)?'Show ':'Hide ')+(p.split('/').pop());}
+ });
+ $('hidcount').textContent=hiddenPaths.size?('| '+hiddenPaths.size+' hidden'):'';
+}
+function toggleHide(path){
+ if(hiddenPaths.has(path))hiddenPaths.delete(path);else hiddenPaths.add(path);
+ saveHidden();applyVisibility();
+}
+function buildTree(data){
+ treeEl.innerHTML='';
+ const hdr=document.createElement('div');hdr.id='treehdr';
+ hdr.innerHTML='<span>Hierarchy</span><span id="hidcount" style="color:var(--warn)"></span><span style="flex:1"></span><button id="showall">Show all</button>';
+ treeEl.appendChild(hdr);
+ const wrap=document.createElement('div');wrap.id='treewrap';treeEl.appendChild(wrap);
+ hdr.querySelector('#showall').addEventListener('click',()=>{hiddenPaths.clear();saveHidden();applyVisibility();});
+ data.nodes.forEach(n=>{
+  const depth=(n.path.match(/\//g)||[]).length;
+  const row=document.createElement('div');row.className='trow';row.dataset.id=n.id;row.dataset.path=n.path;
+  row.style.paddingLeft=(6+depth*13)+'px';
+  row.innerHTML='<span class="tico">'+(KICO[n.kind]||'◇')+'</span><span class="tname">'+n.name+'</span><span class="teye" title="Hide">'+EYE_ON+'</span>';
+  row.title=n.path;
+  row.addEventListener('click',e=>{if(e.target.closest('.teye'))return;const o=nodeById[n.id];if(o){select(o);frameSel(o);}});
+  row.querySelector('.teye').addEventListener('click',e=>{e.stopPropagation();toggleHide(n.path);});
+  wrap.appendChild(row);
+ });
+ markTree();applyVisibility();
+}
+function markTree(){
+ treeEl.querySelectorAll('.trow').forEach(r=>r.classList.toggle('sel',!!(sel&&+r.dataset.id===sel.userData.id)));
+}
+function buildMarkers(mk){
+ while(markerRoot.children.length)markerRoot.remove(markerRoot.children[0]);
+ (mk.anchors||[]).forEach(m=>{
+  if(!m||!m.world||m.world.length<3)return;
+  const c=TYPEC[m.type]||0xff6b35;
+  const s=new THREE.Mesh(new THREE.SphereGeometry(0.07,12,8),new THREE.MeshBasicMaterial({color:c}));
+  s.position.set(m.world[0],m.world[1],-m.world[2]);markerRoot.add(s);
+  if(m.type==='Volume'&&m.halfExtents&&m.halfExtents.length===3){
+   const bg=new THREE.BoxGeometry(m.halfExtents[0]*2,m.halfExtents[1]*2,m.halfExtents[2]*2);
+   const e=new THREE.LineSegments(new THREE.EdgesGeometry(bg),new THREE.LineBasicMaterial({color:c}));
+   e.position.copy(s.position);markerRoot.add(e);
+  }
+  if(m.type==='Path'&&m.knots&&m.knots.length>=6){
+   const pts=[];for(let k=0;k<m.knots.length;k+=3)pts.push(new THREE.Vector3(m.knots[k],m.knots[k+1],-m.knots[k+2]));
+   markerRoot.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),new THREE.LineBasicMaterial({color:c})));
+  }
+ });
+}
+
+/* ---- selection / gizmo ---- */
+let sel=null,gizmoDragging=false,fieldEditing=false,dirty=false;
+let chP=false,chR=false,chS=false; // which channels the user actually edited this burst
+const tc=new TransformControls(cam,renderer.domElement);tc.setSize(0.85);scene.add(tc);
+tc.addEventListener('dragging-changed',e=>{gizmoDragging=e.value;if(e.value)ensureKids();else pushNow('drag end');});
+tc.addEventListener('objectChange',()=>{if(sel){
+ if(tc.mode==='translate')chP=true;else if(tc.mode==='rotate')chR=true;else chS=true;
+ ensureKids();holdKids();dirty=true;if(!fieldEditing)syncFields();}});
+const F={fx:$('fx'),fy:$('fy'),fz:$('fz'),rx:$('rx'),ry:$('ry'),rz:$('rz'),sx:$('sx'),sy:$('sy'),sz:$('sz')};
+function syncFields(){if(!sel)return;const p=sel.position,s=sel.scale;
+ const ur=quatToUnityEuler(sel.quaternion); // fields show UNITY's numbers
+ F.fx.value=+p.x.toFixed(3);F.fy.value=+p.y.toFixed(3);F.fz.value=+(-p.z).toFixed(3);
+ F.rx.value=+ur[0].toFixed(1);F.ry.value=+ur[1].toFixed(1);F.rz.value=+ur[2].toFixed(1);
+ F.sx.value=+s.x.toFixed(3);F.sy.value=+s.y.toFixed(3);F.sz.value=+s.z.toFixed(3);}
+Object.entries(F).forEach(([fkey,f])=>f.addEventListener('input',()=>{
+ if(!sel)return;fieldEditing=true;
+ if(fkey[0]==='f')chP=true;else if(fkey[0]==='r')chR=true;else chS=true;
+ ensureKids();
+ sel.position.set(+F.fx.value||0,+F.fy.value||0,-(+F.fz.value||0));
+ sel.quaternion.copy(unityEulerToQuat([+F.rx.value||0,+F.ry.value||0,+F.rz.value||0]));
+ sel.scale.set(+F.sx.value||0.0001,+F.sy.value||0.0001,+F.sz.value||0.0001);
+ holdKids();
+ dirty=true;fieldEditing=false;
+}));
+function select(o){
+ sel=o;kidSnaps=[];
+ if(o){tc.attach(o);$('selname').textContent=o.name;$('selname').style.color='var(--tx)';syncFields();}
+ else{tc.detach();$('selname').textContent='nothing selected';$('selname').style.color='var(--tx2)';}
+ markTree();
+}
+// Root mode: clicking any part selects the whole prefab (topmost ancestor), like Unity.
+// Part mode: selects the exact mesh you clicked.
+let selMode=localStorage.getItem('sb_selmode')||'root';
+function paintSelMode(){$('selmodeb').textContent='Sel: '+(selMode==='root'?'Root':'Part');$('selmodeb').classList.toggle('on',selMode==='part');}
+paintSelMode();
+$('selmodeb').addEventListener('click',function(){
+ selMode=selMode==='root'?'part':'root';
+ localStorage.setItem('sb_selmode',selMode);
+ paintSelMode();
+});
+/* Solo move: children hold their WORLD transforms while the parent moves.
+   Every push batches the parent's new transform + the children's held transforms,
+   so Unity applies it atomically (children never visibly drift). */
+let solo=localStorage.getItem('sb_solo')==='1',kidSnaps=[];
+if(solo)$('solob').classList.add('on');
+$('solob').addEventListener('click',function(){solo=!solo;this.classList.toggle('on',solo);kidSnaps=[];localStorage.setItem('sb_solo',solo?'1':'0');});
+function captureKids(){
+ kidSnaps=[];
+ if(!sel||!solo)return;
+ sel.children.forEach(c=>{
+  if(!c.userData||c.userData.id===undefined)return;
+  c.updateWorldMatrix(true,false);
+  kidSnaps.push({o:c,m:c.matrixWorld.clone()});
+ });
+}
+// Bursts can start while a previous push is still in flight (dirty carryover), so never
+// gate capture on dirty - just guarantee snaps exist and belong to the CURRENT selection.
+function ensureKids(){
+ if(!solo)return;
+ if(kidSnaps.length===0||kidSnaps.some(k=>k.o.parent!==sel))captureKids();
+}
+function holdKids(){
+ if(!solo||!kidSnaps.length)return;
+ kidSnaps.forEach(k=>{
+  k.o.parent.updateWorldMatrix(true,false);
+  const local=k.o.parent.matrixWorld.clone().invert().multiply(k.m);
+  local.decompose(k.o.position,k.o.quaternion,k.o.scale);
+ });
+}
+$('treeb').addEventListener('click',function(){
+ treeEl.classList.toggle('hidden');this.classList.toggle('on',!treeEl.classList.contains('hidden'));
+ fit();
+});
+/* resizable hierarchy panel (width persists) */
+const treeGrip=$('treegrip');
+const savedTreeW=+localStorage.getItem('sb_treew');
+if(savedTreeW>=140)treeEl.style.width=savedTreeW+'px';
+let tgDrag=false,tgX=0,tgW=0;
+treeGrip.addEventListener('pointerdown',e=>{tgDrag=true;tgX=e.clientX;tgW=treeEl.getBoundingClientRect().width;treeGrip.classList.add('drag');try{treeGrip.setPointerCapture(e.pointerId);}catch(_){}e.preventDefault();});
+treeGrip.addEventListener('pointermove',e=>{if(!tgDrag)return;treeEl.style.width=Math.max(140,Math.min(560,tgW+(e.clientX-tgX)))+'px';});
+treeGrip.addEventListener('pointerup',()=>{if(tgDrag){tgDrag=false;treeGrip.classList.remove('drag');localStorage.setItem('sb_treew',Math.round(treeEl.getBoundingClientRect().width));}});
+function pickTarget(meshHit){
+ if(!meshHit)return null;
+ if(selMode==='part')return meshHit;
+ let o=meshHit;
+ while(o.parent&&o.parent!==rootHolder)o=o.parent;
+ return o;
+}
+document.querySelectorAll('header [data-g]').forEach(b=>b.addEventListener('click',()=>{
+ tc.setMode(b.dataset.g);document.querySelectorAll('header [data-g]').forEach(x=>x.classList.toggle('on',x===b));
+}));
+let snap=false;
+$('snapb').addEventListener('click',function(){snap=!snap;this.classList.toggle('on',snap);
+ tc.setTranslationSnap(snap?0.25:null);tc.setRotationSnap(snap?Math.PI/12:null);tc.setScaleSnap(snap?0.1:null);});
+$('homeb').addEventListener('click',()=>{goalPos.copy(HOME.p);goalTarget.copy(HOME.t);});
+
+/* ---- nav ---- */
+const ray=new THREE.Raycaster(),m2=new THREE.Vector2(),dom=renderer.domElement;
+let navmode=null,lastX=0,lastY=0,moved=0;
+function raycast(cx,cy){const r=dom.getBoundingClientRect();m2.x=((cx-r.left)/r.width)*2-1;m2.y=-((cy-r.top)/r.height)*2+1;ray.setFromCamera(m2,cam);return ray.intersectObjects(meshObjs.filter(o=>o.visible),false)[0]||null;}
+function orbit(dx,dy){const o=goalPos.clone().sub(goalTarget);const s=new THREE.Spherical().setFromVector3(o);s.theta-=dx*0.005;s.phi=Math.max(0.05,Math.min(Math.PI-0.05,s.phi-dy*0.005));o.setFromSpherical(s);goalPos.copy(goalTarget).add(o);}
+function pan(dx,dy){const dist=goalPos.distanceTo(goalTarget);const fwd=goalTarget.clone().sub(goalPos).normalize();const right=fwd.clone().cross(UP).normalize();const up=right.clone().cross(fwd).normalize();const q=dist*0.0016;const mv=right.multiplyScalar(-dx*q).add(up.multiplyScalar(dy*q));goalPos.add(mv);goalTarget.add(mv);}
+dom.addEventListener('contextmenu',e=>e.preventDefault());
+dom.addEventListener('pointerdown',e=>{
+ if(e.button===0&&tc.axis)return;
+ try{dom.setPointerCapture(e.pointerId);}catch(_){}
+ lastX=e.clientX;lastY=e.clientY;moved=0;navmode=(e.button===0)?'lmb':'pan';e.preventDefault();
+});
+dom.addEventListener('pointermove',e=>{
+ if(!navmode||gizmoDragging)return;
+ const dx=e.clientX-lastX,dy=e.clientY-lastY;lastX=e.clientX;lastY=e.clientY;moved+=Math.abs(dx)+Math.abs(dy);
+ if(navmode==='lmb'){if(moved>6)orbit(dx,dy);}else pan(dx,dy);
+});
+dom.addEventListener('pointerup',e=>{
+ if(navmode==='lmb'&&moved<10&&!gizmoDragging){const h=raycast(e.clientX,e.clientY);select(h?pickTarget(h.object.userData.proxyFor||h.object):null);}
+ navmode=null;
+});
+// Frame RELATIVE to the target's own size - a finger frames close, a truck frames far.
+// Empties (bones) have no geometry, so size falls back to bone length (distance to kids).
+function frameSel(o){
+ o=o||sel;if(!o)return;
+ o.updateWorldMatrix(true,true);
+ const b=new THREE.Box3().setFromObject(o);
+ let c,r;
+ if(!b.isEmpty()){
+  c=b.getCenter(new THREE.Vector3());
+  r=b.getBoundingSphere(new THREE.Sphere()).radius;
+ }else{
+  c=o.getWorldPosition(new THREE.Vector3());
+  r=0.08;
+  const cw=new THREE.Vector3();
+  o.children.forEach(ch=>{if(ch.userData&&ch.userData.id!==undefined){ch.getWorldPosition(cw);r=Math.max(r,cw.distanceTo(c));}});
+ }
+ r=Math.max(0.05,r);
+ const d=Math.max(0.45,r*3.2);
+ const fwd=goalPos.clone().sub(goalTarget).normalize();
+ goalTarget.copy(c);goalPos.copy(c).addScaledVector(fwd,d);
+}
+dom.addEventListener('dblclick',e=>{
+ const h=raycast(e.clientX,e.clientY);
+ if(h)frameSel(h.object.userData.proxyFor||h.object);
+});
+window.addEventListener('keydown',e=>{
+ if((e.key==='f'||e.key==='F')&&sel&&document.activeElement.tagName!=='INPUT'){frameSel();e.preventDefault();}
+});
+dom.addEventListener('wheel',e=>{e.preventDefault();const o=goalPos.clone().sub(goalTarget);const d=o.length();o.multiplyScalar(Math.max(0.7,Math.min(140,d*Math.exp(e.deltaY*0.0011)))/d);goalPos.copy(goalTarget).add(o);},{passive:false});
+
+/* ---- LIVE SYNC ---- */
+let lastPush=0,pushInFlight=false,lastPushedJson='';
+async function pushNow(why){
+ if(!sel||!dirty||pushInFlight)return;
+ // The bridge sets WORLD position/rotation and LOCAL scale - send exactly that.
+ const wp=new THREE.Vector3();sel.getWorldPosition(wp);
+ const wq=new THREE.Quaternion();sel.getWorldQuaternion(wq);
+ const ue=quatToUnityEuler(wq);
+ // Channel-aware: send ONLY what the user edited. Blanket-sending scale created a
+ // feedback loop on rotated bone chains (lossy-scale reconstruction error amplified
+ // every push/pull cycle - "the bone grows crazier and crazier").
+ if(!chP&&!chR&&!chS){chP=true;chR=true;}
+ const e0={id:sel.userData.id};
+ if(chP)e0.position=[+wp.x.toFixed(4),+wp.y.toFixed(4),+(-wp.z).toFixed(4)];
+ if(chR)e0.rotationEuler=[+ue[0].toFixed(3),+ue[1].toFixed(3),+ue[2].toFixed(3)];
+ if(chS)e0.scale=[+sel.scale.x.toFixed(4),+sel.scale.y.toFixed(4),+sel.scale.z.toFixed(4)];
+ const edits=[e0];
+ if(solo&&kidSnaps.length){
+  const kp=new THREE.Vector3(),kq=new THREE.Quaternion(),ks=new THREE.Vector3();
+  kidSnaps.forEach(k=>{
+   k.m.decompose(kp,kq,ks);
+   const kue=quatToUnityEuler(kq);
+   const ke0={id:k.o.userData.id,
+    position:[+kp.x.toFixed(4),+kp.y.toFixed(4),+(-kp.z).toFixed(4)],
+    rotationEuler:[+kue[0].toFixed(3),+kue[1].toFixed(3),+kue[2].toFixed(3)]};
+   if(chS)ke0.scale=[+k.o.scale.x.toFixed(4),+k.o.scale.y.toFixed(4),+k.o.scale.z.toFixed(4)];
+   edits.push(ke0);
+  });
+ }
+ const body=JSON.stringify({edits});
+ // Identical body: the transform is already live in Unity, so clear the burst state instead of
+ // returning with dirty still set (which would make the 80ms interval re-serialize forever).
+ if(body===lastPushedJson){dirty=false;chP=false;chR=false;chS=false;return;}
+ pushInFlight=true;
+ try{
+  const t0=performance.now();
+  await fetch(BRIDGE+'/apply',{method:'POST',headers:{'Content-Type':'text/plain'},body});
+  lastPushedJson=body;dirty=false;chP=false;chR=false;chS=false;
+  log('-> Unity: '+sel.name+(solo&&kidSnaps.length?(' | SOLO, '+kidSnaps.length+' kids held'):'')+' ('+(performance.now()-t0).toFixed(0)+'ms) | '+why);
+ }catch(e){log('push failed: '+(e.message||e));}
+ pushInFlight=false;
+}
+setInterval(()=>{if(dirty)pushNow(gizmoDragging?'live drag':'edit');},80);
+
+let pulling=false;
+async function pull(){
+ if(pulling)return;pulling=true;
+ try{
+  const r=await fetch(BRIDGE+'/scene?light=1');const data=await r.json();
+  $('bdot').style.background='var(--ok)';$('bstate').textContent='bridge connected';
+  $('scenechip').textContent='scene: '+data.scene+' | '+data.stats.meshes+' meshes';
+  if(data.nodes.length!==nodeCountSeen){
+   const full=await(await fetch(BRIDGE+'/scene')).json();
+   buildScene(full);select(null);log('scene rebuilt ('+full.stats.meshes+' meshes, '+full.nodes.length+' nodes)');
+  }
+  else{
+   const holdingSel=sel&&(gizmoDragging||dirty);
+   data.nodes.forEach(n=>{
+    const o=nodeById[n.id];if(!o)return;
+    if(holdingSel){
+     // don't fight the user's hand: skip the selected node AND its ancestors mid-edit
+     if(o===sel)return;
+     let a=sel.parent;let isAnc=false;
+     while(a&&a!==rootHolder){if(a===o){isAnc=true;break;}a=a.parent;}
+     if(isAnc)return;
+    }
+    if(n.l)setLocalTransform(o,n.l);else setWorldTransform(o,n.t.p,n.t.r,n.t.s);
+    // Skinned characters: the baked mesh SHAPE changes with pose (bone edits), so
+    // hot-swap the geometry when it actually changed.
+    if(o.userData.skinned&&n.mesh&&o.geometry){
+     const v=n.mesh.v;
+     // strided checksum: prime stride samples every region, so even a small bone
+     // (jaw, hand, head) changing a few hundred verts is always detected
+     let cs=v.length;
+     for(let i=0;i<v.length;i+=29)cs+=v[i];
+     const sig=cs.toFixed(3);
+     if(o.userData.poseSig!==sig){
+      o.userData.poseSig=sig;
+      const hv=v.slice();for(let k=2;k<hv.length;k+=3)hv[k]=-hv[k];
+      const hi=n.mesh.i.slice();for(let k=0;k<hi.length;k+=3){const tw=hi[k+1];hi[k+1]=hi[k+2];hi[k+2]=tw;}
+      o.geometry.setAttribute('position',new THREE.Float32BufferAttribute(hv,3));
+      o.geometry.setIndex(hi);
+      o.geometry.computeVertexNormals();
+      o.geometry.computeBoundingSphere();
+     }
+    }
+    if(o===sel&&!fieldEditing)syncFields();
+   });
+  }
+ }catch(e){$('bdot').style.background='var(--err)';$('bstate').textContent='bridge unreachable';log('bridge unreachable - is Unity open?');}
+ pulling=false;
+}
+async function pullMarkers(){try{const r=await fetch(BRIDGE+'/markers');buildMarkers(await r.json());}catch(e){}}
+setInterval(pull,500); // light pulls are tiny - twice the sync rate for free
+setInterval(pullMarkers,5000);
+
+/* ---- boot ---- */
+(async()=>{
+ try{
+  const p=await discoverBridge();
+  if(!p)throw new Error('no bridge on 8787..8796');
+  $('bdot').style.background='var(--ok)';$('bstate').textContent='bridge v'+(p.version||'?')+' | '+p.project+' :'+(p.port||BRIDGE.split(':').pop());
+  const data=await(await fetch(BRIDGE+'/scene')).json();
+  buildScene(data);pullMarkers();
+  $('scenechip').textContent='scene: '+data.scene+' | '+data.stats.meshes+' meshes';
+  log('connected - drag anything; Unity follows in real time');
+ }catch(e){log('cannot reach bridge at '+BRIDGE+' - is Unity open with the project?');}
+})();
+function fit(){W=mount.clientWidth;H=mount.clientHeight;if(W<2)return;renderer.setSize(W,H);cam.aspect=W/H;cam.updateProjectionMatrix();}
+new ResizeObserver(fit).observe(mount);
+(function loop(){requestAnimationFrame(loop);
+ if(mount.clientWidth>0&&(mount.clientWidth!==W||mount.clientHeight!==H))fit();
+ if(W<2)return;
+ if(!gizmoDragging){cam.position.lerp(goalPos,0.2);targetV.lerp(goalTarget,0.2);cam.lookAt(targetV);}
+ renderer.render(scene,cam);})();
+</script>
+</body>
+</html>

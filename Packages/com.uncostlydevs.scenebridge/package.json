@@ -1,0 +1,21 @@
+{
+  "name": "com.uncostlydevs.scenebridge",
+  "version": "0.9.5",
+  "displayName": "SceneBridge",
+  "description": "Live Unity scene bridge for AI agents (Claude / MCP). An editor HTTP bridge plus runtime ghost and marker helpers - the Unity half of SceneBridge. Pair it with the SceneBridge MCP server. See https://github.com/UncostlyDevs/Unity-Scene-Bridge-",
+  "unity": "2021.3",
+  "author": {
+    "name": "UncostlyDevs",
+    "url": "https://github.com/UncostlyDevs/Unity-Scene-Bridge-"
+  },
+  "license": "MIT",
+  "keywords": [
+    "ai",
+    "mcp",
+    "claude",
+    "editor",
+    "scene",
+    "bridge",
+    "tool"
+  ]
+}
